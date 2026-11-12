@@ -1,8 +1,8 @@
-//! A demo MCP server with one tool, `current_time`, served over streamable
-//! HTTP at /mcp. It is promoted with Kargo like the agents, and the agents
+//! A demo MCP server with two tools, `current_time` and `magic_8_ball`,
+//! served over streamable HTTP at /mcp. It is promoted with Kargo like the agents, and the agents
 //! reach it through the AI gateway only.
 //!
-//! The tool's answer names the server's version and stage, so it is visible
+//! Each tool's answer names the server's version and stage, so it is visible
 //! which MCP server an agent ended up talking to.
 //!
 //! APP_VERSION is baked into the image (the image tag); STAGE comes from the
@@ -33,6 +33,36 @@ pub struct TimeArgs {
     pub utc_offset_hours: Option<i32>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EightBallArgs {
+    /// The yes-or-no question to put to the ball.
+    pub question: String,
+}
+
+/// The twenty answers of the classic toy: ten yes, five vague, five no.
+const EIGHT_BALL: [&str; 20] = [
+    "It is certain.",
+    "It is decidedly so.",
+    "Without a doubt.",
+    "Yes, definitely.",
+    "You may rely on it.",
+    "As I see it, yes.",
+    "Most likely.",
+    "Outlook good.",
+    "Yes.",
+    "Signs point to yes.",
+    "Reply hazy, try again.",
+    "Ask again later.",
+    "Better not tell you now.",
+    "Cannot predict now.",
+    "Concentrate and ask again.",
+    "Don't count on it.",
+    "My reply is no.",
+    "My sources say no.",
+    "Outlook not so good.",
+    "Very doubtful.",
+];
+
 #[derive(Clone)]
 pub struct Toolbox {
     tool_router: ToolRouter<Toolbox>,
@@ -61,6 +91,21 @@ impl Toolbox {
             var("STAGE", "local"),
         ))]))
     }
+
+    #[tool(description = "Shake a Magic 8 Ball: a random, non-binding answer to a yes-or-no question. \
+                          Use it when the user asks for the 8 ball, or wants a decision left to chance. \
+                          Report the ball's answer word for word.")]
+    fn magic_8_ball(&self, Parameters(args): Parameters<EightBallArgs>) -> Result<CallToolResult, ErrorData> {
+        // The clock's nanoseconds are random enough for a toy.
+        let pick = Utc::now().timestamp_subsec_nanos() as usize % EIGHT_BALL.len();
+        Ok(CallToolResult::success(vec![ContentBlock::text(format!(
+            "Asked: \"{}\". The ball says: {} (answered by mcp-server {} in {})",
+            args.question,
+            EIGHT_BALL[pick],
+            var("APP_VERSION", "dev-build"),
+            var("STAGE", "local"),
+        ))]))
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -69,7 +114,7 @@ impl ServerHandler for Toolbox {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_protocol_version(ProtocolVersion::LATEST)
             .with_server_info(Implementation::new("kargo-demo-tools", var("APP_VERSION", "dev-build")))
-            .with_instructions("A demo tool: the current date and time.")
+            .with_instructions("Demo tools: the current date and time, and a Magic 8 Ball.")
     }
 }
 

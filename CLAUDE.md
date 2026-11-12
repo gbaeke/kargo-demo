@@ -5,7 +5,7 @@ A lab for learning Kargo: two Rust agents (`helpdesk`, `research`) and an MCP se
 ## Layout
 
 - `agents/<name>/` — an agent: `src/` and `deploy/{base,stages/<stage>}` (kustomize).
-- `mcp-server/` — same shape, one demo tool (`current_time`).
+- `mcp-server/` — same shape, two demo tools (`current_time`, `magic_8_ball`).
 - `kargo/shared.yaml` — the one `ClusterPromotionTask` (`promote-agent`) every Stage uses.
 - `kargo/<app>.yaml` — per app: Project, ProjectConfig, Warehouse, Stages.
 - `argocd/agents.yaml` — ApplicationSet; one line per app and stage.
