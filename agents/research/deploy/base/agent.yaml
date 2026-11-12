@@ -21,6 +21,10 @@ spec:
           image: ghcr.io/gbaeke/kargo-demo/research
           envFrom:
             - configMapRef: { name: agent-config }
+          env:
+            # The AI gateway holds the provider key; the agent has none.
+            - { name: GATEWAY_URL, value: "http://ai-gateway.ai-gateway.svc.cluster.local:8080" }
+            - { name: MODEL, value: gpt-6-luna }
           ports:
             - { name: http, containerPort: 3000 }
           readinessProbe:

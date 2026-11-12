@@ -1,0 +1,56 @@
+# One AI gateway for the cluster: an agentgateway proxy that agents call
+# instead of calling a model provider. It holds the provider key, so agents
+# need none. Reachable inside the cluster only, at
+#   http://ai-gateway.ai-gateway.svc.cluster.local:8080
+#
+# Installed by cluster/agentgateway.sh; optional, and not managed by Argo CD
+# or Kargo.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-gateway
+  labels:
+    # The cluster refuses pods here that run as root, escalate privileges, etc.
+    pod-security.kubernetes.io/enforce: restricted
+---
+# The controller sees this Gateway and starts a proxy Deployment and a
+# Service, both named ai-gateway. Models (models.yaml) attach to its listener;
+# only objects in this namespace can.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ai-gateway
+  namespace: ai-gateway
+spec:
+  gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef: { group: agentgateway.dev, kind: AgentgatewayParameters, name: ai-gateway }
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8080
+      allowedRoutes:
+        namespaces: { from: Same }
+        # A listener only takes the standard route kinds unless told otherwise.
+        kinds:
+          - { group: gateway.networking.k8s.io, kind: HTTPRoute }
+          - { group: agentgateway.dev, kind: AgentgatewayModel }
+---
+# How the controller runs the proxy: one replica, no port outside the
+# cluster, and the seccomp profile the restricted namespace requires.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: ai-gateway
+  namespace: ai-gateway
+spec:
+  deployment:
+    spec:
+      replicas: 1
+      template:
+        spec:
+          securityContext:
+            seccompProfile: { type: RuntimeDefault }
+  service:
+    spec:
+      type: ClusterIP

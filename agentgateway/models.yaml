@@ -1,0 +1,25 @@
+# The model catalogue: the gateway serves only the models declared here, on
+# the OpenAI-style paths (/v1/chat/completions, /v1/responses). A request for
+# any other model is refused.
+#
+# The object's name is the model name clients ask for, and the name of the
+# deployment in Azure AI Foundry. The API key is not here: it is in the Secret
+# "azure", which cluster/agentgateway.sh creates from the local standalone
+# agentgateway's config. The gateway adds it to every request it forwards.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayModel
+metadata:
+  name: gpt-6-luna
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: ai-gateway, sectionName: http }
+  provider: Azure
+  azure:
+    resourceType: Foundry
+    resourceName: ai-geert
+    projectName: proj-default
+  policies:
+    auth:
+      secretRef:
+        name: azure

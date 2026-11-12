@@ -1,10 +1,12 @@
 [package]
 name = "research"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
 axum = "0.8.9"
+# Plain http only: the gateway is inside the cluster, so no TLS stack is needed.
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
