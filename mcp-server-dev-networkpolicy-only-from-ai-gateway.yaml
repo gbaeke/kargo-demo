@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: only-from-ai-gateway
+  namespace: mcp-server-dev
+spec:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ai-gateway
+      podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: ai-gateway
+    ports:
+    - port: 8081
+  podSelector:
+    matchLabels:
+      app: mcp-server
+  policyTypes:
+  - Ingress

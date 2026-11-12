@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: mcp-server-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: MCP_ADDR
+          value: 0.0.0.0:8081
+        envFrom:
+        - configMapRef:
+            name: mcp-server-config-h5hgfmk52d
+        image: ghcr.io/gbaeke/kargo-demo/mcp-server:0.1.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 10
+        name: mcp-server
+        ports:
+        - containerPort: 8081
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 16Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
