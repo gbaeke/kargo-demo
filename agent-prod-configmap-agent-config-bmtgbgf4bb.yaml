@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  STAGE: prod
+kind: ConfigMap
+metadata:
+  name: agent-config-bmtgbgf4bb
+  namespace: agent-prod
