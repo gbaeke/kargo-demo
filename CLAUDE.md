@@ -9,7 +9,7 @@ A lab for learning Kargo: two Rust agents (`helpdesk`, `research`) and an MCP se
 - `kargo/shared.yaml` — the one `ClusterPromotionTask` (`promote-agent`) every Stage uses.
 - `kargo/<app>.yaml` — per app: Project, ProjectConfig, Warehouse, Stages.
 - `argocd/agents.yaml` — ApplicationSet; one line per app and stage.
-- `agentgateway/` — optional AI gateway: Gateway, Azure model, MCP routes.
+- `agentgateway/` — optional AI gateway: Gateway, Azure model, MCP and A2A routes.
 - `cluster/cluster.sh` (`up`, `agents`, `status`, `stop`, `down`), `cluster/agentgateway.sh` (`install`, `check`, `status`, `uninstall`).
 - `docs/multi-cluster.md` — how stages on separate clusters would work (not built).
 
@@ -20,7 +20,8 @@ A lab for learning Kargo: two Rust agents (`helpdesk`, `research`) and an MCP se
 - Images have no tag on `main`; Kargo sets it at promotion. Never edit `stage/*` branches.
 - A release is a tag `<app>/v<semver>` (e.g. `research/v0.4.0`); the workflow builds only that app.
 - Pipelines: helpdesk and mcp-server dev → prod; research dev → test → prod. Prod is manual and left to the user.
-- Agents reach the model and the MCP server only through the gateway (`/v1/chat/completions`, `/mcp/dev`, `/mcp/prod`). A NetworkPolicy on the MCP server blocks everything else.
+- Agents reach the model, the MCP server and each other only through the gateway (`/v1/chat/completions`, `/mcp/<stage>`, `/a2a/research/<stage>`). NetworkPolicies on the MCP server and on research's A2A port (3001) block everything else.
+- A2A is protocol 1.0, hand-written JSON-RPC (`SendMessage`, agent card): research serves it, helpdesk calls it as the model tool `ask_research_agent` (defined in the agent, not on the MCP server).
 
 ## Working here
 

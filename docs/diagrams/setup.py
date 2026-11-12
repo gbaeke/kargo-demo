@@ -20,10 +20,10 @@ from drawio_kit import Page, mono, pill, write_drawio  # noqa: E402
 
 # (namespace, what runs there, how to reach it)
 VERSIONS = [
-    ("helpdesk-dev", "helpdesk <b>0.3.0</b> · 1 pod", "localhost:32080"),
+    ("helpdesk-dev", "helpdesk <b>0.4.0</b> · 1 pod", "localhost:32080"),
     ("helpdesk-prod", "helpdesk <b>0.3.0</b> · 2 pods", "localhost:32081"),
-    ("research-dev", "research <b>0.3.0</b> · 1 pod", "node IP :32082"),
-    ("research-test", "research <b>0.3.0</b> · 1 pod", "node IP :32083"),
+    ("research-dev", "research <b>0.4.0</b> · 1 pod", "node IP :32082"),
+    ("research-test", "research <b>0.4.0</b> · 1 pod", "node IP :32083"),
     ("research-prod", "not promoted yet", "node IP :32084"),
     ("mcp-server-dev", "mcp-server <b>0.2.0</b> · 1 pod", "gateway only"),
     ("mcp-server-prod", "mcp-server <b>0.1.0</b> · 2 pods", "gateway only"),
@@ -113,8 +113,8 @@ def setup() -> Page:
     # Workloads
     wl = p.group(980, 50, 300, 860, "green", "Workloads", "ns &lt;app&gt;-&lt;stage&gt;", parent=cl)
     p.card(wl, 15, 45, 270, 95, "green", "Agents · Rust, axum",
-           f"One question in, one answer out: {mono('/chat')}. The model may ask for a tool. "
-           "<b>No keys</b>: model and tools are reached through the gateway.")
+           f"One question in, one answer out: {mono('/chat')}. <b>No keys</b>. Model, tools and the other agent "
+           "are reached through the gateway. helpdesk asks research over <b>A2A</b>.")
     p.card(wl, 15, 155, 270, 105, "green", "MCP server · Rust, rmcp",
            f"Tools {mono('current_time')} and {mono('magic_8_ball')} (since 0.2.0). "
            "A <b>NetworkPolicy</b> lets only the gateway's proxy pods connect; a direct call from an agent times out.")
@@ -132,7 +132,8 @@ def setup() -> Page:
                    "The agents' <b>single way out</b>:<br><br>"
                    f"{mono('/v1/chat/completions')}<br>model requests → Azure<br><br>"
                    f"{mono('/mcp/dev')}, {mono('/mcp/prod')}<br>tool calls → MCP server<br><br>"
-                   "dev and test agents use /mcp/dev, prod agents use /mcp/prod.<br><br>"
+                   f"{mono('/a2a/research/dev')}, {mono('…/prod')}<br>A2A: helpdesk → research, port 3001<br><br>"
+                   "dev and test agents use the dev paths, prod agents the prod paths.<br><br>"
                    "No caller keys: fine for a lab only.")
     routes = p.card(gw, 15, 635, 250, 132, "violet", "MCP routes",
                     f"HTTPRoute {mono('mcp')} with two AgentgatewayBackends:<br>"
