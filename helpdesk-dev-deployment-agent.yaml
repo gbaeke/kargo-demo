@@ -24,8 +24,8 @@ spec:
           value: gpt-6-luna
         envFrom:
         - configMapRef:
-            name: agent-config-gkk6m22bc2
-        image: ghcr.io/gbaeke/kargo-demo/helpdesk:0.3.0
+            name: agent-config-9gfkhg76k4
+        image: ghcr.io/gbaeke/kargo-demo/helpdesk:0.4.0
         livenessProbe:
           httpGet:
             path: /healthz

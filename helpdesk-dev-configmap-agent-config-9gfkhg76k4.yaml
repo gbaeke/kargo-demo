@@ -1,8 +1,9 @@
 apiVersion: v1
 data:
+  A2A_RESEARCH_URL: http://ai-gateway.ai-gateway.svc.cluster.local:8080/a2a/research/dev
   MCP_URL: http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/dev
   STAGE: dev
 kind: ConfigMap
 metadata:
-  name: agent-config-gkk6m22bc2
+  name: agent-config-9gfkhg76k4
   namespace: helpdesk-dev
