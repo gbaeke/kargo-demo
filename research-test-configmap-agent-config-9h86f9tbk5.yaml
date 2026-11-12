@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  STAGE: test
+kind: ConfigMap
+metadata:
+  name: agent-config-9h86f9tbk5
+  namespace: research-test
