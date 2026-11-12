@@ -1,5 +1,6 @@
-# Each agent is its own crate, with its own image and its own version
-# (a git tag such as helpdesk/v0.2.0). They share nothing but this workspace.
+# Each agent, and the MCP server, is its own crate with its own image and its
+# own version (a git tag such as helpdesk/v0.2.0). They share nothing but this
+# workspace.
 [workspace]
 resolver = "3"
-members = ["agents/helpdesk", "agents/research"]
+members = ["agents/helpdesk", "agents/research", "mcp-server"]

@@ -8,6 +8,8 @@ configMapGenerator:
   - name: agent-config
     literals:
       - STAGE=prod
+      # The tools: the MCP server's prod stage, as the gateway serves it.
+      - MCP_URL=http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/prod
 replicas:
   - name: agent
     count: 2

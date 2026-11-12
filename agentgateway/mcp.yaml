@@ -1,0 +1,57 @@
+# The MCP server on the gateway, one path per stage of the MCP server:
+#   /mcp/dev   -> the MCP server in namespace mcp-server-dev
+#   /mcp/prod  -> the MCP server in namespace mcp-server-prod
+# Agents call these paths; the MCP server itself accepts connections from the
+# gateway only (see mcp-server/deploy/base/mcp-server.yaml).
+#
+# The server keeps no sessions, so neither does the gateway: each request goes
+# upstream on its own.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-dev
+  namespace: ai-gateway
+spec:
+  mcp:
+    sessionRouting: Stateless
+    targets:
+      - name: tools
+        static:
+          host: mcp-server.mcp-server-dev.svc.cluster.local
+          port: 8081
+          path: /mcp
+          protocol: StreamableHTTP
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: mcp-prod
+  namespace: ai-gateway
+spec:
+  mcp:
+    sessionRouting: Stateless
+    targets:
+      - name: tools
+        static:
+          host: mcp-server.mcp-server-prod.svc.cluster.local
+          port: 8081
+          path: /mcp
+          protocol: StreamableHTTP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - name: ai-gateway
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /mcp/dev }
+      backendRefs:
+        - { group: agentgateway.dev, kind: AgentgatewayBackend, name: mcp-dev }
+    - matches:
+        - path: { type: PathPrefix, value: /mcp/prod }
+      backendRefs:
+        - { group: agentgateway.dev, kind: AgentgatewayBackend, name: mcp-prod }

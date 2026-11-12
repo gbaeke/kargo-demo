@@ -1,0 +1,12 @@
+# The MCP server in dev. The gateway serves it at /mcp/dev.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mcp-server-dev
+resources:
+  - ../../base
+configMapGenerator:
+  - name: mcp-server-config
+    literals:
+      - STAGE=dev
+      # The host name the gateway calls it by (DNS-rebinding protection).
+      - MCP_ALLOWED_HOSTS=mcp-server.mcp-server-dev.svc.cluster.local,mcp-server.mcp-server-dev.svc.cluster.local:8081

@@ -1,11 +1,13 @@
-# What a promotion does, for every agent and every stage. It is cluster-wide,
-# so each agent's Stages refer to it instead of carrying their own copy.
+# What a promotion does, for every app (an agent, or the MCP server) and
+# every stage. It is cluster-wide, so each app's Stages refer to it instead of
+# carrying their own copy.
 #
-# It relies on three conventions, with the Kargo project named after the agent:
-#   - the image is ghcr.io/gbaeke/kargo-demo/<agent>
-#   - the agent's manifests are in agents/<agent>/deploy on main
-#   - the rendered result goes to the branch stage/<agent>/<stage>, and the
-#     Argo CD Application reading it is named <agent>-<stage>
+# It relies on three conventions, with the Kargo project named after the app:
+#   - the image is ghcr.io/gbaeke/kargo-demo/<app>
+#   - the manifests are in agents/<app>/deploy on main; a Stage can pass
+#     another folder as the variable "deploy" (kargo/mcp-server.yaml does)
+#   - the rendered result goes to the branch stage/<app>/<stage>, and the
+#     Argo CD Application reading it is named <app>-<stage>
 apiVersion: kargo.akuity.io/v1alpha1
 kind: ClusterPromotionTask
 metadata:

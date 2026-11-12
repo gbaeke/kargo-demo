@@ -1,0 +1,72 @@
+# The MCP server's pipeline: dev (automatic) -> prod (manual). It uses the
+# same promotion recipe as the agents; only the folder with its manifests
+# differs (mcp-server/deploy, not agents/<name>/deploy), which each Stage
+# passes as a variable.
+#
+# The Project is cluster-scoped and creates the namespace "mcp-server", where
+# the rest of this file lives.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: mcp-server
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata:
+  name: mcp-server
+  namespace: mcp-server
+spec:
+  promotionPolicies:
+    - stageSelector:
+        name: dev
+      autoPromotionEnabled: true
+---
+# Every new semver tag of the image becomes a piece of Freight.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: mcp-server
+  namespace: mcp-server
+spec:
+  interval: 1m
+  subscriptions:
+    - image:
+        repoURL: ghcr.io/gbaeke/kargo-demo/mcp-server
+        imageSelectionStrategy: SemVer
+        discoveryLimit: 5
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: mcp-server
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: mcp-server }
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote
+          vars:
+            - { name: deploy, value: ./src/mcp-server/deploy }
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: mcp-server
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: mcp-server }
+      sources:
+        stages: [dev]
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote
+          vars:
+            - { name: deploy, value: ./src/mcp-server/deploy }

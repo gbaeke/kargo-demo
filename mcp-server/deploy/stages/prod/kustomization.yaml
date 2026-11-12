@@ -1,0 +1,15 @@
+# The MCP server in prod: two replicas. The gateway serves it at /mcp/prod.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mcp-server-prod
+resources:
+  - ../../base
+configMapGenerator:
+  - name: mcp-server-config
+    literals:
+      - STAGE=prod
+      # The host name the gateway calls it by (DNS-rebinding protection).
+      - MCP_ALLOWED_HOSTS=mcp-server.mcp-server-prod.svc.cluster.local,mcp-server.mcp-server-prod.svc.cluster.local:8081
+replicas:
+  - name: mcp-server
+    count: 2

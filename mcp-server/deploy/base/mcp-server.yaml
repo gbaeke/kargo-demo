@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mcp-server }
+  template:
+    metadata:
+      labels: { app: mcp-server }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mcp-server
+          # No tag here: Kargo sets it at promotion time (kustomize-set-image).
+          image: ghcr.io/gbaeke/kargo-demo/mcp-server
+          envFrom:
+            - configMapRef: { name: mcp-server-config }
+          env:
+            - { name: MCP_ADDR, value: "0.0.0.0:8081" }
+          ports:
+            - { name: http, containerPort: 8081 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+# Inside the cluster only: no NodePort, so nothing on your machine reaches it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+spec:
+  selector: { app: mcp-server }
+  ports:
+    - { name: http, port: 8081, targetPort: http }
+---
+# Only the AI gateway's proxy pods may connect. An agent that calls this
+# Service directly gets no answer; it has to go through the gateway. (The
+# kubelet's health checks come from the node and are not affected.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: only-from-ai-gateway
+spec:
+  podSelector:
+    matchLabels: { app: mcp-server }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ai-gateway }
+          podSelector:
+            matchLabels: { gateway.networking.k8s.io/gateway-name: ai-gateway }
+      ports: [{ port: 8081 }]

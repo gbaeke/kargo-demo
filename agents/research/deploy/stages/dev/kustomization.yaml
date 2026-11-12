@@ -8,6 +8,8 @@ configMapGenerator:
   - name: agent-config
     literals:
       - STAGE=dev
+      # The tools: the MCP server's dev stage, as the gateway serves it.
+      - MCP_URL=http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/dev
 patches:
   - target: { kind: Service, name: agent }
     patch: |-
