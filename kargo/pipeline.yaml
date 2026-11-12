@@ -1,0 +1,108 @@
+# Watches the image; every new semver tag becomes a piece of Freight.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: agent
+  namespace: agent
+spec:
+  interval: 1m
+  subscriptions:
+    - image:
+        repoURL: ghcr.io/gbaeke/kargo-demo
+        imageSelectionStrategy: SemVer
+        discoveryLimit: 5
+---
+# What a promotion does, for either stage: render that stage's overlay with
+# the Freight's image tag into the branch stage/<stage>, then have Argo CD
+# sync the stage's Application to that commit.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: PromotionTask
+metadata:
+  name: promote
+  namespace: agent
+spec:
+  vars:
+    - name: repo
+      value: https://github.com/gbaeke/kargo-demo
+    - name: image
+      value: ghcr.io/gbaeke/kargo-demo
+  steps:
+    - uses: git-clone
+      config:
+        repoURL: ${{ vars.repo }}
+        checkout:
+          - branch: main
+            path: ./src
+          - branch: stage/${{ ctx.stage }}
+            create: true
+            path: ./out
+    - uses: git-clear
+      config:
+        path: ./out
+    - uses: kustomize-set-image
+      as: update
+      config:
+        path: ./src/base
+        images:
+          - image: ${{ vars.image }}
+            tag: ${{ imageFrom(vars.image).Tag }}
+    - uses: kustomize-build
+      config:
+        path: ./src/stages/${{ ctx.stage }}
+        outPath: ./out
+    - uses: git-commit
+      as: commit
+      config:
+        path: ./out
+        message: ${{ task.outputs.update.commitMessage }}
+    - uses: git-push
+      config:
+        path: ./out
+    - uses: argocd-update
+      config:
+        apps:
+          - name: agent-${{ ctx.stage }}
+            sources:
+              - repoURL: ${{ vars.repo }}
+                desiredRevision: ${{ task.outputs.commit.commit }}
+---
+# dev takes Freight straight from the Warehouse.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: agent
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: agent
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        - task:
+            name: promote
+          as: promote
+---
+# prod only accepts Freight that has been verified in dev (without a
+# verification step that means: its Argo CD Application was Healthy there).
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: agent
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: agent
+      sources:
+        stages: [dev]
+  promotionTemplate:
+    spec:
+      steps:
+        - task:
+            name: promote
+          as: promote

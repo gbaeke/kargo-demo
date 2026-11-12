@@ -1,0 +1,18 @@
+# The kind cluster for the Kargo lab: one node is enough.
+#
+# Published on the host, on 127.0.0.1 only (admin/admin logins, so not on the LAN):
+#   31080  Argo CD UI        http://localhost:31080
+#   31081  Kargo UI and API  http://localhost:31081
+#   32080  the agent in dev  http://localhost:32080
+#   32081  the agent in prod http://localhost:32081
+#
+# Port mappings can only be set when the cluster is created.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - { containerPort: 31080, hostPort: 31080, listenAddress: "127.0.0.1" }
+      - { containerPort: 31081, hostPort: 31081, listenAddress: "127.0.0.1" }
+      - { containerPort: 32080, hostPort: 32080, listenAddress: "127.0.0.1" }
+      - { containerPort: 32081, hostPort: 32081, listenAddress: "127.0.0.1" }

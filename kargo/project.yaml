@@ -1,0 +1,19 @@
+# The Project is cluster-scoped and creates the namespace "agent", where every
+# other Kargo resource of this pipeline lives.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: agent
+---
+# Same name as the Project. dev promotes new Freight by itself; prod is not
+# listed, so it only moves when someone promotes.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata:
+  name: agent
+  namespace: agent
+spec:
+  promotionPolicies:
+    - stageSelector:
+        name: dev
+      autoPromotionEnabled: true
