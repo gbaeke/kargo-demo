@@ -48,6 +48,10 @@ spec:
         path: ./out
         message: ${{ ctx.project }} ${{ imageFrom(vars.image).Tag }} to ${{ ctx.stage }}
     - uses: git-push
+      # Two agents promoted at the same moment push to the same repository,
+      # and GitHub can reject one of the pushes. Trying again is enough.
+      retry:
+        errorThreshold: 3
       config:
         path: ./out
     - uses: argocd-update
