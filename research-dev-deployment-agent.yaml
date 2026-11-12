@@ -18,6 +18,8 @@ spec:
       - env:
         - name: AGENT_ADDR
           value: 0.0.0.0:3000
+        - name: A2A_ADDR
+          value: 0.0.0.0:3001
         - name: GATEWAY_URL
           value: http://ai-gateway.ai-gateway.svc.cluster.local:8080
         - name: MODEL
@@ -25,7 +27,7 @@ spec:
         envFrom:
         - configMapRef:
             name: agent-config-gkk6m22bc2
-        image: ghcr.io/gbaeke/kargo-demo/research:0.3.0
+        image: ghcr.io/gbaeke/kargo-demo/research:0.4.0
         livenessProbe:
           httpGet:
             path: /healthz
@@ -35,6 +37,8 @@ spec:
         ports:
         - containerPort: 3000
           name: http
+        - containerPort: 3001
+          name: a2a
         readinessProbe:
           httpGet:
             path: /healthz
