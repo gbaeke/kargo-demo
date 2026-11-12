@@ -3,7 +3,7 @@
 # lab cluster, with one Azure model. Installed straight with Helm and kubectl,
 # not through Argo CD or Kargo.
 #
-#   cluster/agentgateway.sh install     controller, the gateway, the Azure key, the model and the MCP routes
+#   cluster/agentgateway.sh install     controller, the gateway, the Azure key, the model, the MCP and A2A routes
 #   cluster/agentgateway.sh check       one chat request through the gateway
 #   cluster/agentgateway.sh status      controller, gateway and models
 #   cluster/agentgateway.sh uninstall   remove the gateway, the key and the controller
@@ -58,6 +58,7 @@ install() {
   key_secret
   k apply -f "$MANIFESTS/models.yaml"
   k apply -f "$MANIFESTS/mcp.yaml"
+  k apply -f "$MANIFESTS/a2a.yaml"
   k -n "$NAMESPACE" wait --for=condition=Programmed gateway/ai-gateway --timeout=120s
   k -n "$NAMESPACE" rollout status deploy/ai-gateway --timeout=120s
   status

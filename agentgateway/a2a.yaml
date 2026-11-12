@@ -1,0 +1,53 @@
+# The research agent's A2A interface on the gateway, one path per stage:
+#   /a2a/research/dev   -> research in namespace research-dev
+#   /a2a/research/prod  -> research in namespace research-prod
+# Other agents call these paths; research's A2A port accepts connections from
+# the gateway only (see agents/research/deploy/base/agent.yaml).
+#
+# The prefix is stripped before the request goes on, so the agent sees
+# /.well-known/agent-card.json and /. When the agent card passes through, the
+# gateway replaces the endpoint address in it with its own, so a caller that
+# follows the card still ends up at the gateway.
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: a2a-research-dev
+  namespace: ai-gateway
+spec:
+  a2a:
+    host: agent-a2a.research-dev.svc.cluster.local
+    port: 3001
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: a2a-research-prod
+  namespace: ai-gateway
+spec:
+  a2a:
+    host: agent-a2a.research-prod.svc.cluster.local
+    port: 3001
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: a2a
+  namespace: ai-gateway
+spec:
+  parentRefs:
+    - name: ai-gateway
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /a2a/research/dev }
+      filters:
+        - type: URLRewrite
+          urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: / } }
+      backendRefs:
+        - { group: agentgateway.dev, kind: AgentgatewayBackend, name: a2a-research-dev }
+    - matches:
+        - path: { type: PathPrefix, value: /a2a/research/prod }
+      filters:
+        - type: URLRewrite
+          urlRewrite: { path: { type: ReplacePrefixMatch, replacePrefixMatch: / } }
+      backendRefs:
+        - { group: agentgateway.dev, kind: AgentgatewayBackend, name: a2a-research-prod }

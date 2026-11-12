@@ -23,11 +23,14 @@ spec:
             - configMapRef: { name: agent-config }
           env:
             - { name: AGENT_ADDR, value: "0.0.0.0:3000" }
+            # The A2A interface, on its own port so it can be closed to all but the gateway.
+            - { name: A2A_ADDR, value: "0.0.0.0:3001" }
             # The AI gateway holds the provider key; the agent has none.
             - { name: GATEWAY_URL, value: "http://ai-gateway.ai-gateway.svc.cluster.local:8080" }
             - { name: MODEL, value: gpt-6-luna }
           ports:
             - { name: http, containerPort: 3000 }
+            - { name: a2a, containerPort: 3001 }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 5
@@ -52,3 +55,35 @@ spec:
   ports:
     # nodePort is set per stage (../stages/*/kustomization.yaml).
     - { name: http, port: 3000, targetPort: http }
+---
+# The A2A interface, inside the cluster only. A separate Service from the web
+# page's NodePort one, so A2A never gets a port on the node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-a2a
+spec:
+  selector: { app: agent }
+  ports:
+    - { name: a2a, port: 3001, targetPort: a2a }
+---
+# The web page (3000) stays open to everyone, so your browser reaches it. The
+# A2A port (3001) only takes connections from the AI gateway's proxy pods:
+# another agent that calls it directly gets no answer and has to go through
+# the gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: a2a-only-from-ai-gateway
+spec:
+  podSelector:
+    matchLabels: { app: agent }
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{ port: 3000 }]
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ai-gateway }
+          podSelector:
+            matchLabels: { gateway.networking.k8s.io/gateway-name: ai-gateway }
+      ports: [{ port: 3001 }]

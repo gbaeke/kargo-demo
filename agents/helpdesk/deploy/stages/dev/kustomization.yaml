@@ -10,6 +10,8 @@ configMapGenerator:
       - STAGE=dev
       # The tools: the MCP server's dev stage, as the gateway serves it.
       - MCP_URL=http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/dev
+      # Another agent: research in its dev stage, over A2A, as the gateway serves it.
+      - A2A_RESEARCH_URL=http://ai-gateway.ai-gateway.svc.cluster.local:8080/a2a/research/dev
 patches:
   - target: { kind: Service, name: agent }
     patch: |-

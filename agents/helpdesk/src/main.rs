@@ -6,6 +6,9 @@
 //! the AI gateway:
 //!   - the model: an OpenAI-style chat request to GATEWAY_URL, for MODEL
 //!   - the tools: an MCP server the gateway serves at MCP_URL
+//!   - another agent: the research agent, over A2A (Agent2Agent, protocol
+//!     version 1.0), at the address the gateway serves it on, A2A_RESEARCH_URL.
+//!     The model sees it as one more tool, `ask_research_agent`.
 //! The model may ask for a tool; the agent calls it over MCP, hands the result
 //! back and lets the model finish. Without MCP_URL, or when the tools cannot
 //! be reached, it answers without tools and says so.
@@ -34,7 +37,12 @@ const SYSTEM_PROMPT: &str = "You are a first-line IT helpdesk agent. Give the mo
 of the user's problem and up to three concrete steps to try, in plain language. If you cannot \
 tell what the problem is, ask one clarifying question. Keep it under 120 words. \
 If you have a tool that gives the current date or time, call it whenever the answer depends on \
-today's date, the day of the week or the time; never guess those.";
+today's date, the day of the week or the time; never guess those. \
+If you have a tool to ask a research agent, use it when the user wants background or an \
+explanation of how something works, and pass on what it says.";
+
+/// The name the model knows the research agent by.
+const RESEARCH_TOOL: &str = "ask_research_agent";
 
 /// The model gets this many chances to ask for tools before it must answer.
 const MAX_TOOL_ROUNDS: usize = 4;
@@ -58,6 +66,69 @@ fn model() -> String {
 /// Where the gateway serves the MCP server, if this agent has tools at all.
 fn mcp_url() -> Option<String> {
     env::var("MCP_URL").ok().filter(|url| !url.is_empty())
+}
+
+/// Where the gateway serves the research agent's A2A interface, if at all.
+fn a2a_research_url() -> Option<String> {
+    env::var("A2A_RESEARCH_URL").ok().filter(|url| !url.is_empty()).map(|url| url.trim_end_matches('/').to_owned())
+}
+
+/// What the research agent says about itself in its agent card.
+struct AgentCard {
+    name: String,
+    description: String,
+    /// Its A2A endpoint. The gateway has rewritten this to its own address.
+    url: String,
+}
+
+/// Fetches the agent card from its well-known path under `base`.
+async fn agent_card(http: &reqwest::Client, base: &str) -> Result<AgentCard, String> {
+    let url = format!("{base}/.well-known/agent-card.json");
+    let response = http.get(&url).timeout(Duration::from_secs(5)).send().await.map_err(|e| format!("cannot fetch {url}: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("{url} answered {}", response.status()));
+    }
+    let card: Value = response.json().await.map_err(|e| format!("{url} is not JSON: {e}"))?;
+    Ok(AgentCard {
+        name: card["name"].as_str().unwrap_or("another agent").to_owned(),
+        description: card["description"].as_str().unwrap_or_default().to_owned(),
+        url: card["supportedInterfaces"][0]["url"].as_str().unwrap_or(base).to_owned(),
+    })
+}
+
+/// Sends one question to the agent over A2A and returns the text of its reply.
+async fn ask_agent(http: &reqwest::Client, card: &AgentCard, question: &str) -> Result<String, String> {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "SendMessage",
+        "params": { "message": {
+            "messageId": format!("{NAME}-{nanos:x}"),
+            "role": "ROLE_USER",
+            "parts": [{ "text": question }],
+        } },
+    });
+    let response = http.post(&card.url).header("A2A-Version", "1.0").json(&request).send().await.map_err(|e| format!("cannot reach {}: {e}", card.url))?;
+    let status = response.status();
+    let body: Value = response.json().await.map_err(|e| format!("{} answered {status} without JSON: {e}", card.url))?;
+    if let Some(message) = body["error"]["message"].as_str() {
+        return Err(format!("{} refused: {message}", card.name));
+    }
+    let message = &body["result"]["message"];
+    let text = message["parts"]
+        .as_array()
+        .map(|parts| parts.iter().filter_map(|part| part["text"].as_str()).collect::<Vec<_>>().join("\n"))
+        .unwrap_or_default();
+    if text.is_empty() {
+        return Err(format!("{} answered {status} without a message", card.name));
+    }
+    // Who answered: the agent names its version and stage in the metadata.
+    let by = &message["metadata"];
+    Ok(match (by["agent"].as_str(), by["version"].as_str(), by["stage"].as_str()) {
+        (Some(agent), Some(version), Some(stage)) => format!("{text}\n(answered over A2A by {agent} {version} in {stage})"),
+        _ => text,
+    })
 }
 
 async fn index() -> Html<String> {
@@ -179,6 +250,37 @@ async fn answer(http: &reqwest::Client, question: &str) -> Result<Answer, String
         }
     }
 
+    // The research agent, offered to the model as one more tool. Its card
+    // says what it is for.
+    let research = match a2a_research_url() {
+        None => None,
+        Some(base) => match agent_card(http, &base).await {
+            Ok(card) => {
+                tools.push(json!({
+                    "type": "function",
+                    "function": {
+                        "name": RESEARCH_TOOL,
+                        "description": format!("Ask another agent, the {}. {} Pass one self-contained question.", card.name, card.description),
+                        "parameters": {
+                            "type": "object",
+                            "properties": { "question": { "type": "string", "description": "The question to ask." } },
+                            "required": ["question"],
+                        },
+                    },
+                }));
+                Some(card)
+            }
+            Err(error) => {
+                let line = format!("The research agent is not available: {error}");
+                note = Some(match note {
+                    Some(earlier) => format!("{earlier}\n{line}"),
+                    None => line,
+                });
+                None
+            }
+        },
+    };
+
     let mut messages = vec![
         json!({ "role": "system", "content": SYSTEM_PROMPT }),
         json!({ "role": "user", "content": question }),
@@ -195,7 +297,15 @@ async fn answer(http: &reqwest::Client, question: &str) -> Result<Answer, String
         for call in calls {
             let name = call["function"]["name"].as_str().unwrap_or_default().to_owned();
             let arguments: Value = serde_json::from_str(call["function"]["arguments"].as_str().unwrap_or("{}")).unwrap_or(json!({}));
-            let result = match &mcp {
+            let result = if name == RESEARCH_TOOL {
+                match &research {
+                    Some(card) => ask_agent(http, card, arguments["question"].as_str().unwrap_or_default())
+                        .await
+                        .unwrap_or_else(|error| format!("the research agent could not answer: {error}")),
+                    None => "the research agent is not available".to_owned(),
+                }
+            } else {
+                match &mcp {
                 Some(client) => {
                     let params = CallToolRequestParams::new(name.clone()).with_arguments(arguments.as_object().cloned().unwrap_or_default());
                     match client.call_tool(params).await {
@@ -212,6 +322,7 @@ async fn answer(http: &reqwest::Client, question: &str) -> Result<Answer, String
                     }
                 }
                 None => "no tool server is connected".to_owned(),
+                }
             };
             messages.push(json!({ "role": "tool", "tool_call_id": call["id"], "content": result }));
             used.push(json!({ "name": name, "arguments": arguments, "result": result }));
@@ -231,7 +342,7 @@ async fn chat(State(http): State<reqwest::Client>, Json(chat): Json<Chat>) -> (S
 }
 
 async fn info() -> Json<Value> {
-    Json(json!({ "agent": NAME, "version": version(), "stage": stage(), "model": model(), "mcp_url": mcp_url() }))
+    Json(json!({ "agent": NAME, "version": version(), "stage": stage(), "model": model(), "mcp_url": mcp_url(), "a2a_research_url": a2a_research_url() }))
 }
 
 #[tokio::main]

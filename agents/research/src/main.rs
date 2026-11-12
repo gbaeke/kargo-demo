@@ -10,11 +10,16 @@
 //! back and lets the model finish. Without MCP_URL, or when the tools cannot
 //! be reached, it answers without tools and says so.
 //!
+//! Other agents can ask it questions over A2A (Agent2Agent, protocol version
+//! 1.0, JSON-RPC): it publishes an agent card and answers `SendMessage` on a
+//! second port, A2A_ADDR. That port is kept apart from the web page so a
+//! NetworkPolicy can open it to the gateway only.
+//!
 //! APP_VERSION is baked into the image (the image tag); STAGE comes from the
 //! stage's kustomize overlay. The page shows both, so a promotion is visible.
 
 use std::env;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -230,6 +235,74 @@ async fn chat(State(http): State<reqwest::Client>, Json(chat): Json<Chat>) -> (S
     }
 }
 
+/// An id that is unique enough for a message or a conversation in a demo.
+fn new_id() -> String {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    format!("{NAME}-{nanos:x}")
+}
+
+/// The agent card: who this agent is, what it can do and where its A2A
+/// endpoint is. The gateway replaces the url with its own address when it
+/// passes the card on, so callers keep going through the gateway.
+async fn agent_card() -> Json<Value> {
+    Json(json!({
+        "name": "Research agent",
+        "description": "Answers a factual question with a few well-established points and a note on what is uncertain.",
+        "version": version(),
+        "supportedInterfaces": [{
+            "url": var("A2A_PUBLIC_URL", "http://127.0.0.1:3001/"),
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0",
+        }],
+        "capabilities": { "streaming": false },
+        "defaultInputModes": ["text/plain"],
+        "defaultOutputModes": ["text/plain"],
+        "skills": [{
+            "id": "research",
+            "name": "Research a question",
+            "description": "Explains a topic or answers a factual question in a few bullet points.",
+            "tags": ["research", "explain"],
+        }],
+    }))
+}
+
+/// The A2A endpoint: JSON-RPC with one method, `SendMessage`. The question is
+/// the text of the incoming message; the answer comes back as a message too
+/// (no long-running task), produced the same way as for the web page.
+async fn a2a(State(http): State<reqwest::Client>, Json(request): Json<Value>) -> Json<Value> {
+    let id = request["id"].clone();
+    let error = |code: i32, message: String| Json(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }));
+    if request["method"] != "SendMessage" {
+        return error(-32601, format!("method {} is not supported, only SendMessage", request["method"]));
+    }
+    let message = &request["params"]["message"];
+    let question = message["parts"]
+        .as_array()
+        .map(|parts| parts.iter().filter_map(|part| part["text"].as_str()).collect::<Vec<_>>().join("\n"))
+        .unwrap_or_default();
+    if question.trim().is_empty() {
+        return error(-32602, "the message has no text part".into());
+    }
+    match answer(&http, &question).await {
+        Ok(answer) => Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": { "message": {
+                "messageId": new_id(),
+                // The caller's conversation id if it sent one, else a new one.
+                "contextId": message["contextId"].as_str().map(str::to_owned).unwrap_or_else(new_id),
+                "role": "ROLE_AGENT",
+                "parts": [{ "text": answer.reply }],
+                "metadata": { "agent": NAME, "version": version(), "stage": stage(), "tools": answer.tools },
+            } },
+        })),
+        Err(message) => {
+            eprintln!("a2a request failed: {message}");
+            error(-32603, message)
+        }
+    }
+}
+
 async fn info() -> Json<Value> {
     Json(json!({ "agent": NAME, "version": version(), "stage": stage(), "model": model(), "mcp_url": mcp_url() }))
 }
@@ -243,7 +316,16 @@ async fn main() {
         .route("/chat", post(chat))
         .route("/info", get(info))
         .route("/healthz", get(|| async { "ok" }))
+        .with_state(http.clone());
+    // The A2A interface, on its own port.
+    let a2a_addr = var("A2A_ADDR", "127.0.0.1:3001");
+    let a2a_app = Router::new()
+        .route("/.well-known/agent-card.json", get(agent_card))
+        .route("/", post(a2a))
         .with_state(http);
+    let a2a_listener = tokio::net::TcpListener::bind(&a2a_addr).await.expect("bind a2a");
+    println!("{NAME} A2A interface listening on {a2a_addr}");
+    tokio::spawn(async move { axum::serve(a2a_listener, a2a_app).await.expect("a2a server") });
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
     println!("{NAME} {} ({}) listening on {addr}", version(), stage());
     let mut term = signal(SignalKind::terminate()).expect("signal handler");
