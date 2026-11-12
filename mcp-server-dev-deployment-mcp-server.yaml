@@ -21,7 +21,7 @@ spec:
         envFrom:
         - configMapRef:
             name: mcp-server-config-h5hgfmk52d
-        image: ghcr.io/gbaeke/kargo-demo/mcp-server:0.1.0
+        image: ghcr.io/gbaeke/kargo-demo/mcp-server:0.2.0
         livenessProbe:
           httpGet:
             path: /healthz
