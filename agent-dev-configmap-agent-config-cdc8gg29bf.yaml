@@ -1,0 +1,7 @@
+apiVersion: v1
+data:
+  STAGE: dev
+kind: ConfigMap
+metadata:
+  name: agent-config-cdc8gg29bf
+  namespace: agent-dev
