@@ -1,0 +1,38 @@
+# One Argo CD Application per agent and stage, generated from the list below:
+# a new agent or a new stage is one more line. Each Application is named
+# <agent>-<stage>, deploys to the namespace of that name and tracks the branch
+# Kargo renders into (stage/<agent>/<stage>), which appears with the first
+# promotion. No automated sync: Kargo's argocd-update step syncs, and the
+# annotation is what allows that one Stage to do so.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agents
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - { agent: helpdesk, stage: dev }
+          - { agent: helpdesk, stage: prod }
+          - { agent: research, stage: dev }
+          - { agent: research, stage: test }
+          - { agent: research, stage: prod }
+  template:
+    metadata:
+      name: "{{ .agent }}-{{ .stage }}"
+      annotations:
+        kargo.akuity.io/authorized-stage: "{{ .agent }}:{{ .stage }}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/gbaeke/kargo-demo
+        targetRevision: "stage/{{ .agent }}/{{ .stage }}"
+        path: .
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .agent }}-{{ .stage }}"
+      syncPolicy:
+        syncOptions: [CreateNamespace=true]

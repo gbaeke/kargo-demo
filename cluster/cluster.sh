@@ -4,18 +4,24 @@
 #
 #   cluster/cluster.sh up        create the cluster (or start it) and install the platform
 #   cluster/cluster.sh platform  install or upgrade cert-manager, Argo CD and Kargo
+#   cluster/cluster.sh agents    apply the agents' pipelines (kargo/, argocd/) and the git token
 #   cluster/cluster.sh stop      stop the node container; state is kept
-#   cluster/cluster.sh status    pods of the platform, Applications and Stages
+#   cluster/cluster.sh status    pods of the platform, Applications, Stages and the agents' URLs
 #   cluster/cluster.sh down      delete the cluster
 #
 # Logins are admin / $ADMIN_PASSWORD (default: admin) for both UIs. They are
 # only reachable on 127.0.0.1 (see kind.yaml).
+#
+# Kargo pushes the stage branches with a GitHub token (fine-grained, Contents:
+# read and write on the repo). `agents` reads it from $PAT_FILE.
 set -euo pipefail
 
 CLUSTER=kargo
 CONTEXT="kind-$CLUSTER"
 DIR="$(dirname "$(realpath "$0")")"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
+PAT_FILE="${PAT_FILE:-$HOME/.config/kargo-demo/pat}"
+REPO=https://github.com/gbaeke/kargo-demo
 
 CERT_MANAGER_VERSION=1.21.3
 ARGOCD_CHART_VERSION=10.18.0 # Argo CD v3.6.1
@@ -68,6 +74,23 @@ platform() {
   echo "Argo CD: http://localhost:31080   Kargo: http://localhost:31081   (admin / $ADMIN_PASSWORD)"
 }
 
+# One token for every agent: a Secret in Kargo's shared resources namespace is
+# found by all projects, by its label and repoURL. The token goes from the
+# file to the cluster without passing through a command line.
+agents() {
+  [ -f "$PAT_FILE" ] || { echo "no GitHub token at $PAT_FILE" >&2; exit 1; }
+  k -n kargo-shared-resources create secret generic gitops-repo \
+    --from-literal=repoURL="$REPO" --from-literal=username=git \
+    --from-file=password="$PAT_FILE" --dry-run=client -o yaml | k apply -f -
+  k -n kargo-shared-resources label secret gitops-repo kargo.akuity.io/cred-type=git --overwrite
+  k apply -f "$DIR/../kargo/shared.yaml"
+  # Projects first: each creates the namespace its other resources go in.
+  for f in "$DIR"/../kargo/*.yaml; do
+    [ "$(basename "$f")" = shared.yaml ] || k apply -f "$f" || { sleep 5; k apply -f "$f"; }
+  done
+  k apply -f "$DIR/../argocd/agents.yaml"
+}
+
 stop() {
   docker stop "$CLUSTER-control-plane" >/dev/null
   echo "cluster $CLUSTER stopped"
@@ -80,11 +103,17 @@ status() {
   echo
   k get applications -n argocd 2>/dev/null || true
   k get warehouses,stages,freight -A 2>/dev/null || true
+  echo
+  # Published ports are on localhost (kind.yaml); any NodePort also answers on the node's address.
+  node="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CLUSTER-control-plane")"
+  k get services -A --field-selector spec.type=NodePort --no-headers \
+    -o custom-columns='NS:.metadata.namespace,PORT:.spec.ports[0].nodePort' |
+    while read -r ns port; do echo "$ns  http://localhost:$port  http://$node:$port"; done
 }
 
 down() { kind delete cluster --name "$CLUSTER"; }
 
 case "${1:-}" in
-  up|platform|stop|status|down) "$1" ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  up|platform|agents|stop|status|down) "$1" ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

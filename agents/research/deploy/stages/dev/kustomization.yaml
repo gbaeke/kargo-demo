@@ -1,17 +1,14 @@
-# prod: two replicas, at http://localhost:32081.
+# research in dev: one replica, at http://localhost:32082.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: agent-prod
+namespace: research-dev
 resources:
   - ../../base
 configMapGenerator:
   - name: agent-config
     literals:
-      - STAGE=prod
-replicas:
-  - name: agent
-    count: 2
+      - STAGE=dev
 patches:
   - target: { kind: Service, name: agent }
     patch: |-
-      - { op: add, path: /spec/ports/0/nodePort, value: 32081 }
+      - { op: add, path: /spec/ports/0/nodePort, value: 32082 }

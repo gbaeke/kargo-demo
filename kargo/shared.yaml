@@ -1,0 +1,59 @@
+# What a promotion does, for every agent and every stage. It is cluster-wide,
+# so each agent's Stages refer to it instead of carrying their own copy.
+#
+# It relies on three conventions, with the Kargo project named after the agent:
+#   - the image is ghcr.io/gbaeke/kargo-demo/<agent>
+#   - the agent's manifests are in agents/<agent>/deploy on main
+#   - the rendered result goes to the branch stage/<agent>/<stage>, and the
+#     Argo CD Application reading it is named <agent>-<stage>
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ClusterPromotionTask
+metadata:
+  name: promote-agent
+spec:
+  vars:
+    - name: repo
+      value: https://github.com/gbaeke/kargo-demo
+    - name: image
+      value: ghcr.io/gbaeke/kargo-demo/${{ ctx.project }}
+    - name: deploy
+      value: ./src/agents/${{ ctx.project }}/deploy
+  steps:
+    - uses: git-clone
+      config:
+        repoURL: ${{ vars.repo }}
+        checkout:
+          - branch: main
+            path: ./src
+          - branch: stage/${{ ctx.project }}/${{ ctx.stage }}
+            create: true
+            path: ./out
+    - uses: git-clear
+      config:
+        path: ./out
+    - uses: kustomize-set-image
+      as: update
+      config:
+        path: ${{ vars.deploy }}/base
+        images:
+          - image: ${{ vars.image }}
+            tag: ${{ imageFrom(vars.image).Tag }}
+    - uses: kustomize-build
+      config:
+        path: ${{ vars.deploy }}/stages/${{ ctx.stage }}
+        outPath: ./out
+    - uses: git-commit
+      as: commit
+      config:
+        path: ./out
+        message: ${{ ctx.project }} ${{ imageFrom(vars.image).Tag }} to ${{ ctx.stage }}
+    - uses: git-push
+      config:
+        path: ./out
+    - uses: argocd-update
+      config:
+        apps:
+          - name: ${{ ctx.project }}-${{ ctx.stage }}
+            sources:
+              - repoURL: ${{ vars.repo }}
+                desiredRevision: ${{ task.outputs.commit.commit }}

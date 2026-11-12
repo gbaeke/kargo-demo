@@ -1,0 +1,86 @@
+//! The research agent, a stub to promote with Kargo: no model behind it. It
+//! "finds sources" for every question and shows its version and stage, so a
+//! promotion is visible.
+//!
+//! APP_VERSION is baked into the image (the image tag); STAGE comes from the
+//! stage's kustomize overlay.
+
+use std::env;
+
+use axum::response::Html;
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use tokio::signal::unix::{SignalKind, signal};
+
+const NAME: &str = "research";
+
+fn version() -> String {
+    env::var("APP_VERSION").unwrap_or_else(|_| "dev-build".into())
+}
+
+fn stage() -> String {
+    env::var("STAGE").unwrap_or_else(|_| "local".into())
+}
+
+async fn index() -> Html<String> {
+    let (version, stage) = (version(), stage());
+    let color = match stage.as_str() {
+        "prod" => "#b3261e",
+        "test" => "#9a6700",
+        _ => "#1b6e3c",
+    };
+    Html(format!(
+        r#"<!doctype html>
+<meta charset="utf-8"><title>{NAME} {version} ({stage})</title>
+<body style="font-family: system-ui; max-width: 40rem; margin: 4rem auto; padding: 0 1rem">
+<h1>Research agent</h1>
+<p>version <b>{version}</b> in stage <b style="color: {color}">{stage}</b></p>
+<form onsubmit="ask(event)"><input id="q" placeholder="What should I look into?" style="width: 70%"> <button>Send</button></form>
+<pre id="a"></pre>
+<script>
+async function ask(e) {{
+  e.preventDefault();
+  const r = await fetch('/chat', {{method: 'POST', headers: {{'content-type': 'application/json'}},
+    body: JSON.stringify({{message: document.getElementById('q').value}})}});
+  document.getElementById('a').textContent = (await r.json()).reply;
+}}
+</script>"#
+    ))
+}
+
+#[derive(Deserialize)]
+struct Chat {
+    message: String,
+}
+
+async fn chat(Json(chat): Json<Chat>) -> Json<Value> {
+    let sources = chat.message.split_whitespace().count().clamp(1, 9);
+    Json(json!({
+        "reply": format!("[{NAME} {} in {}] found {sources} sources about: {}", version(), stage(), chat.message),
+    }))
+}
+
+async fn info() -> Json<Value> {
+    Json(json!({ "agent": NAME, "version": version(), "stage": stage() }))
+}
+
+#[tokio::main]
+async fn main() {
+    let addr = env::var("AGENT_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".into());
+    let app = Router::new()
+        .route("/", get(index))
+        .route("/chat", post(chat))
+        .route("/info", get(info))
+        .route("/healthz", get(|| async { "ok" }));
+    let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
+    println!("{NAME} {} ({}) listening on {addr}", version(), stage());
+    let mut term = signal(SignalKind::terminate()).expect("signal handler");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            term.recv().await;
+        })
+        .await
+        .expect("server");
+}

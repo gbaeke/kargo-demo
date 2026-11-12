@@ -1,0 +1,14 @@
+# helpdesk in dev: one replica, at http://localhost:32080.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: helpdesk-dev
+resources:
+  - ../../base
+configMapGenerator:
+  - name: agent-config
+    literals:
+      - STAGE=dev
+patches:
+  - target: { kind: Service, name: agent }
+    patch: |-
+      - { op: add, path: /spec/ports/0/nodePort, value: 32080 }

@@ -3,10 +3,16 @@
 # Published on the host, on 127.0.0.1 only (admin/admin logins, so not on the LAN):
 #   31080  Argo CD UI        http://localhost:31080
 #   31081  Kargo UI and API  http://localhost:31081
-#   32080  the agent in dev  http://localhost:32080
-#   32081  the agent in prod http://localhost:32081
+#   32080  helpdesk in dev   http://localhost:32080
+#   32081  helpdesk in prod  http://localhost:32081
+#   32082  research in dev   http://localhost:32082
+#   32083  research in test  http://localhost:32083
+#   32084  research in prod  http://localhost:32084
+#   32085-32089              spare, for more agents or stages
 #
-# Port mappings can only be set when the cluster is created.
+# Port mappings can only be set when the cluster is created. A Service on a
+# port that is not listed here is still reachable on the node's own address:
+# `cluster/cluster.sh status` prints it.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -16,3 +22,11 @@ nodes:
       - { containerPort: 31081, hostPort: 31081, listenAddress: "127.0.0.1" }
       - { containerPort: 32080, hostPort: 32080, listenAddress: "127.0.0.1" }
       - { containerPort: 32081, hostPort: 32081, listenAddress: "127.0.0.1" }
+      - { containerPort: 32082, hostPort: 32082, listenAddress: "127.0.0.1" }
+      - { containerPort: 32083, hostPort: 32083, listenAddress: "127.0.0.1" }
+      - { containerPort: 32084, hostPort: 32084, listenAddress: "127.0.0.1" }
+      - { containerPort: 32085, hostPort: 32085, listenAddress: "127.0.0.1" }
+      - { containerPort: 32086, hostPort: 32086, listenAddress: "127.0.0.1" }
+      - { containerPort: 32087, hostPort: 32087, listenAddress: "127.0.0.1" }
+      - { containerPort: 32088, hostPort: 32088, listenAddress: "127.0.0.1" }
+      - { containerPort: 32089, hostPort: 32089, listenAddress: "127.0.0.1" }

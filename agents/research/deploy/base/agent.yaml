@@ -18,7 +18,7 @@ spec:
       containers:
         - name: agent
           # No tag here: Kargo sets it at promotion time (kustomize-set-image).
-          image: ghcr.io/gbaeke/kargo-demo
+          image: ghcr.io/gbaeke/kargo-demo/research
           envFrom:
             - configMapRef: { name: agent-config }
           ports:
@@ -45,5 +45,5 @@ spec:
   type: NodePort
   selector: { app: agent }
   ports:
-    # nodePort is set per stage (stages/*/kustomization.yaml).
+    # nodePort is set per stage (../stages/*/kustomization.yaml).
     - { name: http, port: 3000, targetPort: http }

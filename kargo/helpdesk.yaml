@@ -1,0 +1,65 @@
+# The helpdesk agent's pipeline: dev (automatic) -> prod (manual).
+#
+# The Project is cluster-scoped and creates the namespace "helpdesk", where
+# the rest of this file lives.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: helpdesk
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata:
+  name: helpdesk
+  namespace: helpdesk
+spec:
+  promotionPolicies:
+    - stageSelector:
+        name: dev
+      autoPromotionEnabled: true
+---
+# Every new semver tag of this agent's image becomes a piece of Freight.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: helpdesk
+  namespace: helpdesk
+spec:
+  interval: 1m
+  subscriptions:
+    - image:
+        repoURL: ghcr.io/gbaeke/kargo-demo/helpdesk
+        imageSelectionStrategy: SemVer
+        discoveryLimit: 5
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: helpdesk
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: helpdesk }
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: helpdesk
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: helpdesk }
+      sources:
+        stages: [dev]
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote

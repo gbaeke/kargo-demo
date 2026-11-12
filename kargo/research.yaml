@@ -1,0 +1,85 @@
+# The research agent's pipeline: dev (automatic) -> test (automatic) -> prod
+# (manual). One environment more than helpdesk: pipelines need not match.
+#
+# The Project is cluster-scoped and creates the namespace "research", where
+# the rest of this file lives.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: research
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata:
+  name: research
+  namespace: research
+spec:
+  promotionPolicies:
+    - stageSelector:
+        name: dev
+      autoPromotionEnabled: true
+    - stageSelector:
+        name: test
+      autoPromotionEnabled: true
+---
+# Every new semver tag of this agent's image becomes a piece of Freight.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: research
+  namespace: research
+spec:
+  interval: 1m
+  subscriptions:
+    - image:
+        repoURL: ghcr.io/gbaeke/kargo-demo/research
+        imageSelectionStrategy: SemVer
+        discoveryLimit: 5
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: research
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: research }
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: test
+  namespace: research
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: research }
+      sources:
+        stages: [dev]
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: research
+spec:
+  requestedFreight:
+    - origin: { kind: Warehouse, name: research }
+      sources:
+        stages: [test]
+  promotionTemplate:
+    spec:
+      steps:
+        - task: { name: promote-agent, kind: ClusterPromotionTask }
+          as: promote

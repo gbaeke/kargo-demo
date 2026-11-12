@@ -1,10 +1,12 @@
-//! A stub "agent" to promote with Kargo: no model behind it, it only answers
-//! with its version and the stage it runs in, so a promotion is visible.
+//! The helpdesk agent, a stub to promote with Kargo: no model behind it. It
+//! "opens a ticket" for every message and shows its version and stage, so a
+//! promotion is visible.
 //!
 //! APP_VERSION is baked into the image (the image tag); STAGE comes from the
 //! stage's kustomize overlay.
 
 use std::env;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use axum::response::Html;
 use axum::routing::{get, post};
@@ -12,6 +14,9 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::signal::unix::{SignalKind, signal};
+
+const NAME: &str = "helpdesk";
+static TICKETS: AtomicU32 = AtomicU32::new(1000);
 
 fn version() -> String {
     env::var("APP_VERSION").unwrap_or_else(|_| "dev-build".into())
@@ -23,14 +28,18 @@ fn stage() -> String {
 
 async fn index() -> Html<String> {
     let (version, stage) = (version(), stage());
-    let color = if stage == "prod" { "#b3261e" } else { "#1b6e3c" };
+    let color = match stage.as_str() {
+        "prod" => "#b3261e",
+        "test" => "#9a6700",
+        _ => "#1b6e3c",
+    };
     Html(format!(
         r#"<!doctype html>
-<meta charset="utf-8"><title>agent {version} ({stage})</title>
+<meta charset="utf-8"><title>{NAME} {version} ({stage})</title>
 <body style="font-family: system-ui; max-width: 40rem; margin: 4rem auto; padding: 0 1rem">
-<h1>Stub agent</h1>
+<h1>Helpdesk agent</h1>
 <p>version <b>{version}</b> in stage <b style="color: {color}">{stage}</b></p>
-<form onsubmit="ask(event)"><input id="q" placeholder="Ask something" style="width: 70%"> <button>Send</button></form>
+<form onsubmit="ask(event)"><input id="q" placeholder="Describe your problem" style="width: 70%"> <button>Send</button></form>
 <pre id="a"></pre>
 <script>
 async function ask(e) {{
@@ -49,13 +58,14 @@ struct Chat {
 }
 
 async fn chat(Json(chat): Json<Chat>) -> Json<Value> {
+    let ticket = TICKETS.fetch_add(1, Ordering::Relaxed);
     Json(json!({
-        "reply": format!("[agent {} in {}] you said: {}", version(), stage(), chat.message),
+        "reply": format!("[{NAME} {} in {}] ticket #{ticket} opened for: {}", version(), stage(), chat.message),
     }))
 }
 
 async fn info() -> Json<Value> {
-    Json(json!({ "version": version(), "stage": stage() }))
+    Json(json!({ "agent": NAME, "version": version(), "stage": stage() }))
 }
 
 #[tokio::main]
@@ -67,7 +77,7 @@ async fn main() {
         .route("/info", get(info))
         .route("/healthz", get(|| async { "ok" }));
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
-    println!("agent {} ({}) listening on {addr}", version(), stage());
+    println!("{NAME} {} ({}) listening on {addr}", version(), stage());
     let mut term = signal(SignalKind::terminate()).expect("signal handler");
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
