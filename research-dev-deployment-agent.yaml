@@ -15,10 +15,15 @@ spec:
     spec:
       automountServiceAccountToken: false
       containers:
-      - envFrom:
+      - env:
+        - name: GATEWAY_URL
+          value: http://ai-gateway.ai-gateway.svc.cluster.local:8080
+        - name: MODEL
+          value: gpt-6-luna
+        envFrom:
         - configMapRef:
             name: agent-config-cdc8gg29bf
-        image: ghcr.io/gbaeke/kargo-demo/research:0.1.0
+        image: ghcr.io/gbaeke/kargo-demo/research:0.2.0
         livenessProbe:
           httpGet:
             path: /healthz
