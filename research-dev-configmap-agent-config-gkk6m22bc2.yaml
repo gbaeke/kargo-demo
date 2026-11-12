@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  MCP_URL: http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/dev
+  STAGE: dev
+kind: ConfigMap
+metadata:
+  name: agent-config-gkk6m22bc2
+  namespace: research-dev
