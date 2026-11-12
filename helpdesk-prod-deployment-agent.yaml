@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: helpdesk-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: AGENT_ADDR
+          value: 0.0.0.0:3000
+        - name: GATEWAY_URL
+          value: http://ai-gateway.ai-gateway.svc.cluster.local:8080
+        - name: MODEL
+          value: gpt-6-luna
+        envFrom:
+        - configMapRef:
+            name: agent-config-8h442ffcdb
+        image: ghcr.io/gbaeke/kargo-demo/helpdesk:0.3.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 10
+        name: agent
+        ports:
+        - containerPort: 3000
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 16Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault

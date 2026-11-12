@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  MCP_URL: http://ai-gateway.ai-gateway.svc.cluster.local:8080/mcp/prod
+  STAGE: prod
+kind: ConfigMap
+metadata:
+  name: agent-config-8h442ffcdb
+  namespace: helpdesk-prod
